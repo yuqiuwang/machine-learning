@@ -13,11 +13,11 @@
 用法：
 python pic\_cnv\_extract.py -i ./sample1\_chr2.png -o ./sample1\_2\_36173502\_38514591.png -p chr2,36173502,38514591
 
-原始图片
+原始图片 800X1280
 
 ![](https://i.imgur.com/UvuE0LF.png)
 
-运行脚本后的图片
+运行脚本后的图片 300X300
 
 ![](https://i.imgur.com/WX5dJOM.png)
 
