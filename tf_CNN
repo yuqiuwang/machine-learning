@@ -1,0 +1,121 @@
+    # -*- coding: utf-8 -*-
+    """
+    Author  : yuqiuwang
+    Mail    : yuqiuwang929@gmail.com
+    Website : https://www.yuqiulearn.cn
+    Created : 2018/10/12 14:27
+    """
+
+    import numpy as np
+    import random
+    import tensorflow as tf
+    
+    def getdata():
+        # 生成10000个正态分布的随机数，并且已10个一个节点划成1000个样本，然后随机分为两类
+        data = np.random.normal(loc=0.0, scale=1.0, size=10000)
+        outdata = []
+        label = []
+        
+        for idx, x in enumerate(data):
+            if idx % 10 == 0:
+                outdata.append([x])
+                if np.random.randint(0, 2) == 0:
+                    label.append([0, 1])
+                else:
+                    label.append([1, 0])
+            else:
+                outdata[-1].append(x)
+        return outdata, label
+    
+    # 生成训练集和测试集
+    train_data, train_label = getdata()
+    test_data, test_label  = getdata()
+    
+    # 转换成tensorflow的变量
+    train_data = tf.Variable(tf.constant(train_data), name="train_data", dtype=tf.float32)
+    train_label = tf.Variable(tf.constant(train_label), name="train_label", dtype=tf.float32)
+    test_data = tf.Variable(tf.constant(test_data), name="test_data", dtype=tf.float32)
+    test_label = tf.Variable(tf.constant(test_label), name="test_label", dtype=tf.float32)
+    
+    -----------------
+    # tensorflow mode
+    INPUT_NODE = 10
+    OUTPUT_NODE = 2
+    TRAIN_STEP = 3000
+    
+    def add_layer(layername,inputs,in_size,out_size,activation_function=None):  
+        with tf.variable_scope(layername,reuse=None):
+            # 权重和偏置都提前给一个初始值
+            Weights = tf.get_variable("weights",[in_size,out_size],initializer=tf.random_normal_initializer(stddev=0.1))
+            biases = tf.get_variable("biases",[out_size],initializer=tf.random_normal_initializer(mean=0.1,stddev=0.1))
+        Wx_plus_b = tf.matmul(inputs,Weights) + biases # 乘以权重，加上偏置
+        # 如果有定义激活函数，则返回激活函数后的结果
+        if activation_function is None:
+            outputs = Wx_plus_b
+        else:
+            outputs = activation_function(Wx_plus_b)
+        # 多返回了一个权重，主要是为了后面做正则化（不明白正则化的可以查一下，这是用来防止训练过拟合的）
+        return outputs, Weights
+    
+    def mode(inputs,outputs,outputs_target,learning_rate=0.01,Optimizer = "Adam",regular = 0.001):
+        end_points = {} # 用来储存训练情况的字典
+        # 第一层，输入之前定义个数节，输出45个节点
+        y1,W1 = add_layer("net1",inputs,INPUT_NODE,45,tf.exp)
+        # 第二层，输入45个节点，输出50个节点
+        y2,W2 = add_layer("net2",y1,45,50)
+        # 第三层，输入50个节点，输出20个节点
+        y3,W3 = add_layer("net3",y2,50,20)
+        # 第四层，输入20个节点，输出5个节点
+        y4,W4 = add_layer("net4",y3,20,5)
+        # 第四层，输入5个节点，输出之前定义个数节点，并通过softmax函数返回节点
+        outputs,W5 = add_layer("outnet",y4,5,OUTPUT_NODE,tf.nn.softmax)
+        
+        # L2正则化
+        regularizer = tf.contrib.layers.l2_regularizer(regular)
+        cross_entropy = -tf.reduce_mean(outputs_target*tf.log(outputs))+regularizer(W3)+regularizer(W2)+regularizer(W1)+regularizer(W4)+regularizer(W5)
+        
+        # 定义了两种可选的梯度下降法优化器，可以添加其他的
+        if Optimizer == "Adam":
+            train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
+        elif Optimizer == "GradientDescent":
+            train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy)
+        
+        # 准确率估算，先计算每个样本张量上最大值的位置是否相同，返回1或者0，然后计算均值。
+        correct_prediction = tf.equal(tf.argmax(outputs,1), tf.argmax(outputs_target,1))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction,tf.float32))
+        
+        end_points["accuracy"] = accuracy
+        end_points["loss"] = cross_entropy
+        end_points["train_step"] = train_step
+        end_points["inputs"] = inputs
+        end_points["outputs"] = outputs
+        return end_points
+        
+    def train():
+    ##run tf
+    x = tf.placeholder(tf.float32, [None, input_node],name = "data")
+    y_ = tf.placeholder(tf.float32, [None, output_node])
+    # 学习速率定为0.005
+    end_points = mode(x,y_,y_,0.005,"GradientDescent")
+    init_op = tf.group(tf.global_variables_initializer(),tf.local_variables_initializer())
+    # 打开一个保存模型的saver
+    saver = tf.train.Saver()
+    with tf.Session() as sess:
+        sess.run(init_op)
+        # 训练集
+        for i in range(0, TRAIN_STEP):  # 训练TRAIN_STEP步
+            _,loss_ = sess.run([end_points["train_step"],end_points["loss"]],feed_dict={x:train_data.eval(),y_:train_label.eval()})
+            print (i,loss_)
+        # 测试集
+        _,loss_,accuracy_,test_y,true_y = sess.run([end_points["train_step"],\
+            end_points["loss"],end_points["accuracy"],end_points["outputs"],y_],\
+            feed_dict={x:test_data.eval(),y_:test_label.eval()})
+        print (accuracy_)   # 打印准确率
+        print (test_y,true_y)  # 打印测试结果
+        saver.save(sess, "model.ckpt")  # 保存模型
+        
+    def main(_):
+        train()
+
+    if __name__ == "__main__":
+            tf.app.run()
